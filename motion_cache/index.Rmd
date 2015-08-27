@@ -1,0 +1,127 @@
+---
+title: "Demo of the Slidify Capability"
+author: "Kevin A. Ryan"
+github:
+  repo: MotionChart
+  user: marathon54
+output:
+  html_document:
+    highlight: monochrome
+    theme: journal
+hitheme: tomorrow
+job: The Johns Hopkins University - Applied Physics Lab
+mode: selfcontained
+highlighter: hprettify
+subtitle: 
+framework: io2012
+widgets:
+- mathjax
+- quiz
+---
+
+
+####A short Example based on World Bank Data 
+
+
+### why reproducible research?
+make a slidify version to demonstrate the capability!!!
+
+***why reproducible research***
+
+What reproducible reporting is about is a validation of the data analysis. Because you're not collecting independent data using independent methods, it's a little bit more difficult to validate the scientific question itself. But if you can take someone's data and reproduce their findings, then you can, in some sense, validate the data analysis. *This involves having the data and the code because more likely than not, the analysis will have been done on the computer using some sort of programming language, like R.* So you can take their code and their data and reproduce the findings that they come up with. Then you can at least have confidence that the analysis was done appropriately and that the correct methods were used.
+
+---
+
+###Motion Chart Prototype
+
+Step 1: Get and wrangle data from World Bank
+```{r, eval=FALSE}
+getWorldBankData <- function(id='SP.POP.TOTL', date='1960:2010', value="value", per.page=12000){ 
+        require(RJSONIO)
+        url <- paste("http://api.worldbank.org/countries/all/indicators/", id,
+                     "?date=", date, "&format=json&per_page=", per.page,
+                     sep="")
+        
+        wbData <- fromJSON(url)[[2]]
+        
+        wbData = data.frame(
+                year = as.numeric(sapply(wbData, "[[", "date")), 
+                value = as.numeric(sapply(wbData, function(x)
+                        ifelse(is.null(x[["value"]]),NA, x[["value"]]))),  
+                country.name = sapply(wbData, function(x) x[["country"]]['value']),
+                country.id = sapply(wbData, function(x) x[["country"]]['id'])    
+        )
+        
+        names(wbData)[2] <- value
+        
+        return(wbData)
+}
+
+getWorldBankCountries <- function(){
+        require(RJSONIO)
+        wbCountries <-
+                fromJSON("http://api.worldbank.org/countries?per_page=12000&format=json") 
+        wbCountries <- data.frame(t(sapply(wbCountries[[2]], unlist)))
+        wbCountries$longitude <- as.numeric(wbCountries$longitude)
+        wbCountries$latitude <- as.numeric(wbCountries$latitude)
+        levels(wbCountries$region.value) <- gsub(" \\(all income levels\\)",
+                                                 "", levels(wbCountries$region.value))
+        return(wbCountries)
+}
+
+## Create a string 1960:this year, e.g. 1960:2011
+years <- paste("1960:", format(Sys.Date(), "%Y"), sep="")
+
+## Fertility rate
+fertility.rate <- getWorldBankData(id='SP.DYN.TFRT.IN',
+                                   date=years, value="fertility.rate")
+
+## Life Expectancy
+life.exp <- getWorldBankData(id='SP.DYN.LE00.IN',  date=years,
+                             value="life.expectancy") 
+
+## Population
+population <- getWorldBankData(id='SP.POP.TOTL',  date=years,
+                               value="population")
+
+## GDP per capita (current US$)
+GDP.per.capita <- getWorldBankData(id='NY.GDP.PCAP.CD',
+                                   date=years,
+                                   value="GDP.per.capita.Current.USD") 
+
+## Merge data sets
+wbData <- merge(life.exp, fertility.rate)
+wbData <- merge(wbData, population)
+wbData <- merge(wbData, GDP.per.capita)
+
+## Get country mappings
+wbCountries <- getWorldBankCountries()
+
+## Add regional information
+wbData <- merge(wbData, wbCountries[c("iso2Code", "region.value", 
+                                      "incomeLevel.value")],
+                by.x="country.id", by.y="iso2Code")
+
+
+ setwd("~/_data/MotionChart")
+subData<- read.table("~/_data/MotionChart/worldbank.csv", header=TRUE, quote="\"")
+
+```
+
+
+---
+
+###Step 2: Build the Motion Chart
+```{r, warning=FALSE, error=FALSE }
+## Create a motion chart
+suppressPackageStartupMessages(library(googleVis))
+library(googleVis)
+
+M <- gvisMotionChart(subData, idvar="country.name", timevar="year",
+                     options=list(width=700, height=600))
+
+## Display the chart in your browser
+plot(M)
+```
+
+---
